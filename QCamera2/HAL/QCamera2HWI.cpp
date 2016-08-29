@@ -546,17 +546,6 @@ void QCamera2HardwareInterface::release_recording_frame(
     }
     ALOGD("%s: E", __func__);
 
-    //Close and delete duplicated native handle and FD's
-    if ((hw->mVideoMem != NULL)&&(hw->mStoreMetaDataInFrame>0)) {
-        ret = hw->mVideoMem->closeNativeHandle(opaque,TRUE);
-        if (ret != NO_ERROR) {
-            ALOGE("Invalid video metadata");
-            return;
-        }
-    } else {
-        ALOGW("Possible FD leak. Release recording called after stop");
-    }
-
     hw->lockAPI();
     ret = hw->processAPI(QCAMERA_SM_EVT_RELEASE_RECORIDNG_FRAME, (void *)opaque);
     if (ret == NO_ERROR) {
@@ -1041,8 +1030,7 @@ QCamera2HardwareInterface::QCamera2HardwareInterface(int cameraId)
       mPreviewFrameSkipValid(0),
       mCurrFrameCnt(0),
       mLastAFScanTime(0),
-      mLastCaptureTime(0),
-      mVideoMem(NULL)
+      mLastCaptureTime(0)
 {
     mCameraDevice.common.tag = HARDWARE_DEVICE_TAG;
     mCameraDevice.common.version = HARDWARE_DEVICE_API_VERSION(1, 0);
@@ -1840,8 +1828,12 @@ QCameraMemory *QCamera2HardwareInterface::allocateStreamBuf(cam_stream_type_t st
             }
             ALOGD("%s: vidoe buf using cached memory = %d", __func__, bCachedMem);
             QCameraVideoMemory *videoMemory = new QCameraVideoMemory(mGetMemory, bCachedMem);
+            int usage = 0;
+            cam_format_t fmt;
+            mParameters.getStreamFormat(CAM_STREAM_TYPE_VIDEO,fmt);
+            videoMemory->setVideoInfo(usage, fmt);
+
             mem = videoMemory;
-            mVideoMem = videoMemory;
         }
         break;
     case CAM_STREAM_TYPE_DEFAULT:
@@ -2232,7 +2224,6 @@ int QCamera2HardwareInterface::startRecording()
 {
     int32_t rc = NO_ERROR;
     ALOGD("%s: E", __func__);
-    mVideoMem = NULL;
     if (mParameters.getRecordingHintValue() == false) {
         ALOGE("%s: start recording when hint is false, stop preview first", __func__);
         stopPreview();
@@ -2285,7 +2276,6 @@ int QCamera2HardwareInterface::stopRecording()
         }
     }
 #endif
-    mVideoMem = NULL;
     ALOGD("%s: X", __func__);
     return rc;
 }
