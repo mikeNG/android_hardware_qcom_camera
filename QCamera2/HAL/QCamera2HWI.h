@@ -363,6 +363,7 @@ private:
     int32_t processHDRData(cam_asd_hdr_scene_data_t hdr_scene);
     int32_t transAwbMetaToParams(cam_awb_params_t &awb_params);
     int32_t processAWBUpdate(cam_awb_params_t &awb_params);
+    int32_t processAECUpdate(cam_ae_params_t &aec_params);
 
     int32_t sendEvtNotify(int32_t msg_type, int32_t ext1, int32_t ext2);
     int32_t sendDataNotify(int32_t msg_type,
@@ -600,6 +601,7 @@ private:
     int32_t mPostviewJob;
     int32_t mMetadataJob;
     int32_t mReprocJob;
+    int32_t mRawdataJob;
     int32_t mOutputCount;
     bool mPreviewFrameSkipValid;
     cam_frame_idx_range_t mPreviewFrameSkipIdxRange;

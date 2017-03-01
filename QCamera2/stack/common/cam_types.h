@@ -835,16 +835,16 @@ typedef struct {
 
 typedef enum {
   S_NORMAL = 0,
-  S_SCENERY,
-  S_PORTRAIT,
-  S_PORTRAIT_BACKLIGHT,
-  S_SCENERY_BACKLIGHT,
-  S_BACKLIGHT,
-  S_NIGHT,
-  S_MACRO,
-  S_SPORTS,
-  S_MIXED_LIGHT,
-  S_INDOOR,
+  S_SCENERY, //1
+  S_PORTRAIT, //2
+  S_PORTRAIT_BACKLIGHT,//3
+  S_SCENERY_BACKLIGHT,//4
+  S_BACKLIGHT,//5
+  S_NIGHT,//6
+  S_MACRO,//7
+  S_SPORTS, //8
+  S_MIXED_LIGHT, //9
+  S_INDOOR, //10
   S_MAX,
 } cam_auto_scene_t;
 
@@ -865,7 +865,10 @@ typedef struct {
     int settled;
     uint32_t exp_index;
     uint32_t line_count;
-    uint32_t unknown[4];
+    uint32_t estimate_snap_exp_time;
+    uint32_t estimate_snap_iso;
+    uint32_t estimate_current_luma;
+    uint32_t estimate_luma_target;
 } cam_ae_params_t;
 
 typedef struct {
@@ -1364,6 +1367,9 @@ typedef struct {
 #define CAM_QCOM_FEATURE_CHROMA_FLASH   (1<<13)
 #define CAM_QCOM_FEATURE_OPTIZOOM       (1<<14)
 #define CAM_QCOM_FEATURE_SNAPSHOT_HDR   (1<<15)
+#define CAM_QCOM_FEATURE_LLVD           (1<<15)
+#define CAM_QCOM_FEATURE_DIS20          (1<<16)
+#define CAM_QCOM_FEATURE_STILLMORE      (1<<17)
 
 // Counter clock wise
 typedef enum {

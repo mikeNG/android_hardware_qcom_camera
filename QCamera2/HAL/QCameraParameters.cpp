@@ -59,6 +59,10 @@ const char QCameraParameters::KEY_QC_SUPPORTED_ISO_MODES[] = "iso-values";
 const char QCameraParameters::KEY_QC_EXPOSURE_TIME[] = "exposure-time";
 const char QCameraParameters::KEY_QC_MIN_EXPOSURE_TIME[] = "min-exposure-time";
 const char QCameraParameters::KEY_QC_MAX_EXPOSURE_TIME[] = "max-exposure-time";
+const char QCameraParameters::KEY_QC_CURRENT_EST_SNAP_EXP_TIME[] = "estimate-snap-exp-time";
+const char QCameraParameters::KEY_QC_CURRENT_EST_SNAP_ISO[] = "estimate-snap-iso";
+const char QCameraParameters::KEY_QC_EST_CURRENT_LUMA[] = "estimate-current-luma";
+const char QCameraParameters::KEY_QC_EST_LUMA_TARGET[] = "estimate-luma-target";
 const char QCameraParameters::KEY_QC_LENSSHADE[] = "lensshade";
 const char QCameraParameters::KEY_QC_SUPPORTED_LENSSHADE_MODES[] = "lensshade-values";
 const char QCameraParameters::KEY_QC_AUTO_EXPOSURE[] = "auto-exposure";
@@ -128,7 +132,11 @@ const char QCameraParameters::KEY_QC_SUPPORTED_AF_BRACKET_MODES[] = "af-bracket-
 const char QCameraParameters::KEY_QC_CHROMA_FLASH[] = "chroma-flash";
 const char QCameraParameters::KEY_QC_SUPPORTED_CHROMA_FLASH_MODES[] = "chroma-flash-values";
 const char QCameraParameters::KEY_QC_OPTI_ZOOM[] = "opti-zoom";
+const char QCameraParameters::KEY_QC_SEE_MORE[] = "see-more";
 const char QCameraParameters::KEY_QC_SUPPORTED_OPTI_ZOOM_MODES[] = "opti-zoom-values";
+const char QCameraParameters::KEY_QC_SUPPORTED_SEE_MORE_MODES[] = "see-more-values";
+const char QCameraParameters::KEY_QC_STILL_MORE[] = "still-more";
+const char QCameraParameters::KEY_QC_SUPPORTED_STILL_MORE_MODES[] = "still-more-values";
 const char QCameraParameters::KEY_QC_WB_MANUAL_CCT[] = "wb-manual-cct";
 const char QCameraParameters::KEY_QC_MIN_WB_CCT[] = "min-wb-cct";
 const char QCameraParameters::KEY_QC_MAX_WB_CCT[] = "max-wb-cct";
@@ -642,6 +650,7 @@ QCameraParameters::QCameraParameters()
       m_bAVTimerEnabled(false),
       m_bDISEnabled(false),
       m_bMobiEnabled(false),
+      m_bDISEnabled(false),
       m_AdjustFPS(NULL),
       m_bHDR1xFrameEnabled(true),
       m_HDRSceneEnabled(false),
@@ -650,10 +659,14 @@ QCameraParameters::QCameraParameters()
       m_bHDROutputCropEnabled(false),
       m_curCCT(-1),
       m_curFocusPos(-1),
+      m_curEstSnapExpTime(-1),
+      m_curEstSnapIso(-1),
       m_tempMap(),
       m_bAFBracketingOn(false),
       m_bChromaFlashOn(false),
       m_bOptiZoomOn(false),
+      m_bSeeMoreOn(false),
+      m_bStillMoreOn(false),
       m_bHfrMode(false),
       mHfrMode(CAM_HFR_MODE_OFF),
       m_bDisplayFrame(true),
@@ -736,6 +749,8 @@ QCameraParameters::QCameraParameters(const String8 &params)
     m_bAFBracketingOn(false),
     m_bChromaFlashOn(false),
     m_bOptiZoomOn(false),
+    m_bSeeMoreOn(false),
+    m_bStillMoreOn(false),
     m_bHfrMode(false),
     mHfrMode(CAM_HFR_MODE_OFF),
     mExposureTime(0),
@@ -2094,7 +2109,7 @@ int32_t QCameraParameters::setSaturation(const QCameraParameters& params)
     if (prev_sat !=  saturation) {
         if((saturation >= m_pCapability->saturation_ctrl.min_value) &&
            (saturation <= m_pCapability->saturation_ctrl.max_value)) {
-            ALOGV(" new saturation value : %d ", saturation);
+            ALOGD(" new saturation value : %d ", saturation);
             return setSaturation(saturation);
         } else {
             ALOGE("%s: invalid value %d out of (%d, %d)",
@@ -2544,6 +2559,45 @@ int32_t  QCameraParameters::setExposureTime(const QCameraParameters& params)
             return setExposureTime(str);
         }
     }
+
+    return NO_ERROR;
+}
+
+/*===========================================================================
+ * FUNCTION   : updateEstSnapAECParm
+ *
+ * DESCRIPTION: update estimate AEC info for snapshot from metadata callback
+ *
+ * PARAMETERS :
+ *   @est_exp_time : estimate snapshot exposure time
+ *   @est_iso : estimate snapshot iso
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t  QCameraParameters::updateEstSnapAECParm(cam_ae_params_t aec_params)
+{
+
+
+
+    if (aec_params.estimate_snap_exp_time != m_curEstSnapExpTime) {
+        ALOGD("%s: update estimate snap exp time. old:%d, now:%d", __func__,
+            m_curEstSnapExpTime, aec_params.estimate_snap_exp_time);
+        m_curEstSnapExpTime = aec_params.estimate_snap_exp_time;
+        set(KEY_QC_CURRENT_EST_SNAP_EXP_TIME, m_curEstSnapExpTime);
+    }
+
+
+    if (aec_params.estimate_snap_iso != m_curEstSnapIso) {
+        ALOGD("%s: update estimate snap iso. old:%d, now:%d", __func__,
+            m_curEstSnapIso, aec_params.estimate_snap_iso);
+        m_curEstSnapIso = aec_params.estimate_snap_iso;
+        set(KEY_QC_CURRENT_EST_SNAP_ISO, m_curEstSnapIso);
+    }
+
+    set(KEY_QC_EST_LUMA_TARGET, aec_params.estimate_luma_target);
+    set(KEY_QC_EST_CURRENT_LUMA, aec_params.estimate_current_luma);
 
     return NO_ERROR;
 }
@@ -3117,6 +3171,65 @@ int32_t QCameraParameters::setOptiZoom(const QCameraParameters& params)
             strcmp(str, prev_str) != 0) {
             m_bNeedRestart = true;
             return setOptiZoom(str);
+        }
+    }
+    return NO_ERROR;
+}
+
+/*===========================================================================
+ * FUNCTION   : setSeeMore
+ *
+ * DESCRIPTION: set see more (llvd) from user setting
+ *
+ * PARAMETERS :
+ *   @params  : user setting parameters
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setSeeMore(const QCameraParameters& params)
+{
+    if ((m_pCapability->qcom_supported_feature_mask &
+          CAM_QCOM_FEATURE_LLVD) == 0){
+      ALOGE("%s: See more is not supported",__func__);
+      return NO_ERROR;
+    }
+    const char *str = params.get(KEY_QC_SEE_MORE);
+    const char *prev_str = get(KEY_QC_SEE_MORE);
+    ALOGE("%s: str =%s & prev_str =%s",__func__, str, prev_str);
+    if (str != NULL) {
+        if (prev_str == NULL ||
+            strcmp(str, prev_str) != 0) {
+            m_bNeedRestart = true;
+            return setSeeMore(str);
+        }
+    }
+    return NO_ERROR;
+}
+
+/*===========================================================================
+ * FUNCTION   : setStillMore
+ *
+ * DESCRIPTION: set still more from user setting
+ *
+ * PARAMETERS :
+ *   @params  : user setting parameters
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setStillMore(const QCameraParameters& params)
+{
+    const char *str = params.get(KEY_QC_STILL_MORE);
+    const char *prev_str = get(KEY_QC_STILL_MORE);
+    ALOGD("%s: str =%s & prev_str =%s",__func__, str, prev_str);
+    if (str != NULL) {
+        if (prev_str == NULL ||
+            strcmp(str, prev_str) != 0) {
+            m_bNeedRestart = true;
+            return setStillMore(str);
         }
     }
     return NO_ERROR;
@@ -3838,6 +3951,7 @@ int32_t QCameraParameters::updateParameters(QCameraParameters& params,
     if ((rc = setAFBracket(params)))                    final_rc = rc;
     if ((rc = setChromaFlash(params)))                  final_rc = rc;
     if ((rc = setOptiZoom(params)))                     final_rc = rc;
+    if ((rc = setSeeMore(params)))                      final_rc = rc;
 
 UPDATE_PARAM_DONE:
     needRestart = m_bNeedRestart;
@@ -4356,6 +4470,19 @@ int32_t QCameraParameters::initDefaultParameters()
     // Set feature on/off
     String8 onOffValues = createValuesStringFromMap(
         ON_OFF_MODES_MAP, sizeof(ON_OFF_MODES_MAP) / sizeof(QCameraMap));
+
+    //Set See more (LLVD)
+    if (m_pCapability->qcom_supported_feature_mask &
+            CAM_QCOM_FEATURE_LLVD) {
+        set(KEY_QC_SUPPORTED_SEE_MORE_MODES, onOffValues);
+        setSeeMore(VALUE_OFF);
+    }
+
+	if(m_pCapability->qcom_supported_feature_mask &
+        CAM_QCOM_FEATURE_STILLMORE) {
+        set(KEY_QC_SUPPORTED_STILL_MORE_MODES, onOffValues);
+		setStillMore(VALUE_OFF);
+	}
 
     //Set Scene Detection
     set(KEY_QC_SUPPORTED_SCENE_DETECT, onOffValues);
@@ -5406,7 +5533,7 @@ int32_t  QCameraParameters::setExposureTime(const char *expTimeStr)
         if (expTimeUs == 0 ||
             (expTimeUs >= min_exp_time && expTimeUs <= max_exp_time)) {
             mExposureTime = expTimeUs;
-            ALOGD("%s, exposure time: %d", __func__, expTimeUs);
+            ALOGD("####%s, exposure time: %d", __func__, expTimeUs);
             updateParamEntry(KEY_QC_EXPOSURE_TIME, expTimeStr);
             return AddSetParmEntryToBatch(m_pParamBuf,
                                           CAM_INTF_PARM_EXPOSURE_TIME,
@@ -5415,7 +5542,7 @@ int32_t  QCameraParameters::setExposureTime(const char *expTimeStr)
         }
     }
 
-    ALOGE("Invalid exposure time, value: %s",
+    ALOGE("####Invalid exposure time, value: %s",
           (expTimeStr == NULL) ? "NULL" : expTimeStr);
     return BAD_VALUE;
 }
@@ -6602,7 +6729,7 @@ int32_t QCameraParameters::setChromaFlash(const char *chromaFlashStr)
  * DESCRIPTION: set opti zoom value
  *
  * PARAMETERS :
- *   @aecBracketStr : opti zoom value string
+ *   @optiZoomStr : opti zoom value string
  *
  * RETURN     : int32_t type of status
  *              NO_ERROR  -- success
@@ -6624,6 +6751,68 @@ int32_t QCameraParameters::setOptiZoom(const char *optiZoomStr)
     }
     ALOGE("Invalid opti zoom value: %s",
         (optiZoomStr == NULL) ? "NULL" : optiZoomStr);
+    return BAD_VALUE;
+}
+
+/*===========================================================================
+ * FUNCTION   : setSeeMore
+ *
+ * DESCRIPTION: set see more value
+ *
+ * PARAMETERS :
+ *   @seeMoreStr : see more value string
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setSeeMore(const char *seeMoreStr)
+{
+    ALOGE("%s: seeMoreStr =%s",__func__,seeMoreStr);
+    if(seeMoreStr != NULL) {
+        int value = lookupAttr(ON_OFF_MODES_MAP,
+                               sizeof(ON_OFF_MODES_MAP)/sizeof(QCameraMap),
+                               seeMoreStr);
+        if(value != NAME_NOT_FOUND) {
+            m_bSeeMoreOn = (value != 0);
+            updateParamEntry(KEY_QC_SEE_MORE, seeMoreStr);
+
+            return NO_ERROR;
+        }
+    }
+    ALOGE("Invalid see more value: %s",
+        (seeMoreStr == NULL) ? "NULL" : seeMoreStr);
+    return BAD_VALUE;
+}
+
+/*===========================================================================
+ * FUNCTION   : setStillMore
+ *
+ * DESCRIPTION: set still more value
+ *
+ * PARAMETERS :
+ *   @stillMoreStr : still more value string
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCameraParameters::setStillMore(const char *stillMoreStr)
+{
+    ALOGD("%s: stillMoreStr =%s",__func__,stillMoreStr);
+    if(stillMoreStr != NULL) {
+        int value = lookupAttr(ON_OFF_MODES_MAP,
+                               sizeof(ON_OFF_MODES_MAP)/sizeof(QCameraMap),
+                               stillMoreStr);
+        if(value != NAME_NOT_FOUND) {
+            m_bStillMoreOn = (value != 0);
+            updateParamEntry(KEY_QC_STILL_MORE, stillMoreStr);
+
+            return NO_ERROR;
+        }
+    }
+    ALOGE("Invalid still more value: %s",
+        (stillMoreStr == NULL) ? "NULL" : stillMoreStr);
     return BAD_VALUE;
 }
 
@@ -7482,6 +7671,8 @@ uint8_t QCameraParameters::getBurstCountForAdvancedCapture()
     } else if (isHDREnabled()) {
         //number of snapshots required for HDR.
         burstCount = m_pCapability->hdr_bracketing_setting.num_frames;
+    } else if (isStillMoreEnabled()) {
+        burstCount = 5;
     } else if (isAEBracketEnabled()) {
       burstCount = 0;
       const char *str_val = m_AEBracketingClient.values;
@@ -9245,10 +9436,11 @@ bool QCameraParameters::isMobicatEnabled()
 bool QCameraParameters::needThumbnailReprocess(uint32_t *pFeatureMask)
 {
     if (isUbiFocusEnabled() || isChromaFlashEnabled() ||
-        isOptiZoomEnabled()) {
+		isOptiZoomEnabled() || isStillMoreEnabled()) {
         *pFeatureMask &= ~CAM_QCOM_FEATURE_CHROMA_FLASH;
         *pFeatureMask &= ~CAM_QCOM_FEATURE_UBIFOCUS;
         *pFeatureMask &= ~CAM_QCOM_FEATURE_OPTIZOOM;
+		*pFeatureMask &= ~CAM_QCOM_FEATURE_STILLMORE;
         return false;
     } else {
         return true;
@@ -9279,9 +9471,53 @@ uint8_t QCameraParameters::getNumOfExtraBuffersForImageProc()
         numOfBufs += m_pCapability->opti_zoom_settings_need.burst_count - 1;
     } else if (isChromaFlashEnabled()) {
         numOfBufs += 1; /* flash and non flash */
+    } else if (isStillMoreEnabled()) {
+        numOfBufs += 4;
     }
 
     return numOfBufs * getBurstNum();
+}
+
+/*===========================================================================
+ * FUNCTION   : getNumOfExtraBuffersForVideo
+ *
+ * DESCRIPTION: get number of extra buffers needed by image processing
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : number of extra buffers needed by ImageProc;
+ *              0 if not ImageProc enabled
+ *==========================================================================*/
+uint8_t QCameraParameters::getNumOfExtraBuffersForVideo()
+{
+    uint8_t numOfBufs = 0;
+
+    if (isSeeMoreEnabled()) {
+        numOfBufs = 1;
+    }
+
+    return numOfBufs;
+}
+
+/*===========================================================================
+ * FUNCTION   : getNumOfExtraBuffersForPreview
+ *
+ * DESCRIPTION: get number of extra buffers needed by image processing
+ *
+ * PARAMETERS : none
+ *
+ * RETURN     : number of extra buffers needed by ImageProc;
+ *              0 if not ImageProc enabled
+ *==========================================================================*/
+uint8_t QCameraParameters::getNumOfExtraBuffersForPreview()
+{
+    uint8_t numOfBufs = 0;
+
+    if (isSeeMoreEnabled() && !isZSLMode() && getRecordingHintValue()) {
+        numOfBufs = 1;
+    }
+
+    return numOfBufs;
 }
 
 }; // namespace qcamera

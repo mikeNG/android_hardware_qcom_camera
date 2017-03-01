@@ -1035,10 +1035,10 @@ QCamera2HardwareInterface::QCamera2HardwareInterface(int cameraId)
       mPostviewJob(-1),
       mMetadataJob(-1),
       mReprocJob(-1),
+      mRawdataJob(-1),
       mPreviewFrameSkipValid(0),
       mCurrFrameCnt(0),
       mVideoMem(NULL)
-
 {
     mCameraDevice.common.tag = HARDWARE_DEVICE_TAG;
     mCameraDevice.common.version = HARDWARE_DEVICE_API_VERSION(1, 0);
@@ -1638,10 +1638,12 @@ uint8_t QCamera2HardwareInterface::getBufNumRequired(cam_stream_type_t stream_ty
 
                 bufferCnt = zslQBuffers + minCircularBufNum +
                         mParameters.getNumOfExtraBuffersForImageProc() +
-                        EXTRA_ZSL_PREVIEW_STREAM_BUF;
+                        EXTRA_ZSL_PREVIEW_STREAM_BUF +
+                        mParameters.getNumOfExtraBuffersForPreview();
             } else {
                 bufferCnt = CAMERA_MIN_STREAMING_BUFFERS +
-                            mParameters.getMaxUnmatchedFramesInQueue();
+                        mParameters.getMaxUnmatchedFramesInQueue() +
+                        mParameters.getNumOfExtraBuffersForPreview();
             }
             bufferCnt += minUndequeCount;
         }
@@ -1703,7 +1705,8 @@ uint8_t QCamera2HardwareInterface::getBufNumRequired(cam_stream_type_t stream_ty
         break;
     case CAM_STREAM_TYPE_VIDEO:
         {
-            bufferCnt = CAMERA_MIN_VIDEO_BUFFERS;
+            bufferCnt = CAMERA_MIN_VIDEO_BUFFERS +
+                    mParameters.getNumOfExtraBuffersForVideo();
         }
         break;
     case CAM_STREAM_TYPE_METADATA:
@@ -1901,7 +1904,6 @@ QCameraHeapMemory *QCamera2HardwareInterface::allocateStreamInfoBuf(
 {
     int rc = NO_ERROR;
     const char *effect;
-
     QCameraHeapMemory *streamInfoBuf = new QCameraHeapMemory(QCAMERA_ION_USE_CACHE);
     if (!streamInfoBuf) {
         ALOGE("allocateStreamInfoBuf: Unable to allocate streamInfo object");
@@ -1951,6 +1953,9 @@ QCameraHeapMemory *QCamera2HardwareInterface::allocateStreamInfoBuf(
     case CAM_STREAM_TYPE_VIDEO:
         streamInfo->useAVTimer = mParameters.isAVTimerEnabled();
         streamInfo->dis_enable = mParameters.isDISEnabled();
+        if (mParameters.isSeeMoreEnabled()) {
+            streamInfo->pp_config.feature_mask |= CAM_QCOM_FEATURE_LLVD;
+        }
     case CAM_STREAM_TYPE_PREVIEW:
         if (mParameters.getRecordingHintValue()) {
             const char* dis_param = mParameters.get(QCameraParameters::KEY_QC_DIS);
@@ -1962,6 +1967,9 @@ QCameraHeapMemory *QCamera2HardwareInterface::allocateStreamInfoBuf(
                 streamInfo->is_type = static_cast<cam_is_type_t>(atoi(value));
             } else {
                 streamInfo->is_type = IS_TYPE_NONE;
+            }
+            if (mParameters.isSeeMoreEnabled()) {
+                streamInfo->pp_config.feature_mask |= CAM_QCOM_FEATURE_LLVD;
             }
         }
         break;
@@ -2455,6 +2463,8 @@ int32_t QCamera2HardwareInterface::configureAdvancedCapture()
         rc = configureZSLHDRBracketing();
     } else if (mParameters.isAEBracketEnabled()) {
         rc = configureAEBracketing();
+    } else if (mParameters.isStillMoreEnabled()) {
+        ALOGE("%s: still more enabled, no need to do any configuration",__func__);
     } else {
         ALOGE("%s: No Advanced Capture feature enabled!! ", __func__);
         rc = BAD_VALUE;
@@ -2701,7 +2711,8 @@ int QCamera2HardwareInterface::takePicture()
             mParameters.isOptiZoomEnabled() ||
             mParameters.isHDREnabled() ||
             mParameters.isChromaFlashEnabled() ||
-            mParameters.isAEBracketEnabled()) {
+            mParameters.isAEBracketEnabled() ||
+            mParameters.isStillMoreEnabled()) {
         rc = configureAdvancedCapture();
         if (rc == NO_ERROR) {
             numSnapshots = mParameters.getBurstCountForAdvancedCapture();
@@ -2759,6 +2770,7 @@ int QCamera2HardwareInterface::takePicture()
 
                 waitDefferedWork(mSnapshotJob);
                 waitDefferedWork(mMetadataJob);
+                waitDefferedWork(mRawdataJob);
 
                 {
                     DefferWorkArgs args;
@@ -3819,6 +3831,28 @@ int32_t QCamera2HardwareInterface::processAWBUpdate(cam_awb_params_t &awb_params
 }
 
 /*===========================================================================
+ * FUNCTION   : processAECUpdate
+ *
+ * DESCRIPTION: process AEC update event
+ *
+ * PARAMETERS :
+ *   @awb_params: current aec parameters from back-end.
+ *
+ * RETURN     : int32_t type of status
+ *              NO_ERROR  -- success
+ *              none-zero failure code
+ *==========================================================================*/
+int32_t QCamera2HardwareInterface::processAECUpdate(cam_ae_params_t &aec_params)
+{
+    ALOGE("#### estimate info for AEC: exp time: %d, iso: %d, cur luma: %d, luma tgt: %d\r\n",
+        aec_params.estimate_snap_exp_time, aec_params.estimate_snap_iso,
+        aec_params.estimate_current_luma, aec_params.estimate_luma_target);
+
+    return mParameters.updateEstSnapAECParm(aec_params);
+}
+
+
+/*===========================================================================
  * FUNCTION   : processJpegNotify
  *
  * DESCRIPTION: process jpeg event
@@ -4009,7 +4043,8 @@ int32_t QCamera2HardwareInterface::addStreamToChannel(QCameraChannel *pChannel,
 
     if ( ( streamType == CAM_STREAM_TYPE_SNAPSHOT ||
         streamType == CAM_STREAM_TYPE_POSTVIEW ||
-        streamType == CAM_STREAM_TYPE_METADATA) &&
+        streamType == CAM_STREAM_TYPE_METADATA ||
+        streamType == CAM_STREAM_TYPE_RAW) &&
         !isZSLMode() &&
         !isLongshotEnabled() &&
         !mParameters.getRecordingHintValue()) {
@@ -4044,6 +4079,13 @@ int32_t QCamera2HardwareInterface::addStreamToChannel(QCameraChannel *pChannel,
                         args);
 
                 if ( mMetadataJob == -1) {
+                    rc = UNKNOWN_ERROR;
+                }
+            } else if (streamType == CAM_STREAM_TYPE_RAW) {
+                mRawdataJob = queueDefferedWork(CMD_DEFF_ALLOCATE_BUFF,
+                        args);
+
+                if ( mRawdataJob == -1) {
                     rc = UNKNOWN_ERROR;
                 }
             }
@@ -4084,8 +4126,6 @@ int32_t QCamera2HardwareInterface::addPreviewChannel()
 {
     int32_t rc = NO_ERROR;
     QCameraChannel *pChannel = NULL;
-    char value[PROPERTY_VALUE_MAX];
-    bool raw_yuv = false;
 
     if (m_channels[QCAMERA_CH_TYPE_PREVIEW] != NULL) {
         ALOGD("%s : Preview Channel already added and so delete it", __func__);
@@ -4128,21 +4168,6 @@ int32_t QCamera2HardwareInterface::addPreviewChannel()
         ALOGE("%s: add preview stream failed, ret = %d", __func__, rc);
         delete pChannel;
         return rc;
-    }
-
-    property_get("persist.camera.raw_yuv", value, "0");
-    raw_yuv = atoi(value) > 0 ? true : false;
-    if ( raw_yuv &&
-         ( mParameters.getRecordingHintValue() == false ) ) {
-        rc = addStreamToChannel(pChannel,
-                                CAM_STREAM_TYPE_RAW,
-                                preview_raw_stream_cb_routine,
-                                this);
-        if (rc != NO_ERROR) {
-            ALOGE("%s: add raw stream failed, ret = %d", __func__, rc);
-            delete pChannel;
-            return rc;
-        }
     }
 
     m_channels[QCAMERA_CH_TYPE_PREVIEW] = pChannel;
@@ -4301,7 +4326,7 @@ int32_t QCamera2HardwareInterface::addRawChannel()
         delete pChannel;
         return rc;
     }
-
+    waitDefferedWork(mRawdataJob);
     m_channels[QCAMERA_CH_TYPE_RAW] = pChannel;
     return rc;
 }
@@ -4699,6 +4724,12 @@ QCameraReprocessChannel *QCamera2HardwareInterface::addOnlineReprocChannel(
                 (uint8_t) mParameters.getInt(CameraParameters::KEY_ZOOM);
     } else {
         pp_config.feature_mask &= ~CAM_QCOM_FEATURE_OPTIZOOM;
+    }
+
+    if(mParameters.isStillMoreEnabled()) {
+        pp_config.feature_mask |= CAM_QCOM_FEATURE_STILLMORE;
+    } else {
+        pp_config.feature_mask &= ~CAM_QCOM_FEATURE_STILLMORE;
     }
 
     //WNR and HDR happen inline. No extra buffers needed.
@@ -5719,12 +5750,14 @@ bool QCamera2HardwareInterface::needReprocess()
     if (mParameters.isUbiFocusEnabled() |
         mParameters.isChromaFlashEnabled() |
         mParameters.isHDREnabled() |
-        mParameters.isOptiZoomEnabled()) {
-        ALOGD("%s: need reprocess for |UbiFocus=%d|ChramaFlash=%d|OptiZoom=%d|",
+		mParameters.isOptiZoomEnabled() |
+		mParameters.isStillMoreEnabled()) {
+		ALOGD("%s: need reprocess for |UbiFocus=%d|ChramaFlash=%d|OptiZoom=%d|StillMore=%d",
                                          __func__,
                                          mParameters.isUbiFocusEnabled(),
                                          mParameters.isChromaFlashEnabled(),
-                                         mParameters.isOptiZoomEnabled());
+		                                 mParameters.isOptiZoomEnabled(),
+		                                 mParameters.isStillMoreEnabled());
         pthread_mutex_unlock(&m_parm_lock);
         return true;
     }

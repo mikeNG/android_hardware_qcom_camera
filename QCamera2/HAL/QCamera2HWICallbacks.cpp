@@ -1205,10 +1205,34 @@ void QCamera2HardwareInterface::metadata_stream_cb_routine(mm_camera_super_buf_t
             ALOGE("%s: processHDRData failed", __func__);
         }
     }
+
      /* Update 3a info */
     if(pMetaData->is_ae_params_valid) {
+        ALOGE("%s: estimate info for AEC: exp time: %d, iso: %d cur luma: %d, luma tgt: %d\r\n",
+              __func__, pMetaData->ae_params.estimate_snap_exp_time,
+              pMetaData->ae_params.estimate_snap_iso,
+              pMetaData->ae_params.estimate_current_luma,
+              pMetaData->ae_params.estimate_luma_target);
+
         pme->mExifParams.ae_params = pMetaData->ae_params;
         pme->mFlashNeeded = pMetaData->ae_params.flash_needed;
+
+        qcamera_sm_internal_evt_payload_t *payload =
+            (qcamera_sm_internal_evt_payload_t *)malloc(sizeof(qcamera_sm_internal_evt_payload_t));
+        if (NULL != payload) {
+            memset(payload, 0, sizeof(qcamera_sm_internal_evt_payload_t));
+            payload->evt_type = QCAMERA_INTERNAL_EVT_AEC_UPDATE;
+            payload->aec_data = pMetaData->ae_params;
+            int32_t rc = pme->processEvt(QCAMERA_SM_EVT_EVT_INTERNAL, payload);
+            if (rc != NO_ERROR) {
+                ALOGE("%s: processEvt aec_update failed", __func__);
+                free(payload);
+                payload = NULL;
+
+            }
+        } else {
+            ALOGE("%s: No memory for aec_update qcamera_sm_internal_evt_payload_t", __func__);
+        }
 
         /* Antishake algorithm (using ISO) */
         pme->processAntishakeAlgo(pme,
