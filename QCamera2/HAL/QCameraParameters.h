@@ -627,8 +627,6 @@ public:
     bool isDisplayFrameNeeded() { return m_bDisplayFrame; };
     int32_t setDisplayFrame(bool enabled) {m_bDisplayFrame=enabled; return 0;};
     int32_t updateEstSnapAECParm(cam_ae_params_t aec_params);
-    void setPrvwIsoMode(int32_t isoValue);
-    int32_t getPrvwIsoMode();
 
 private:
     int32_t setPreviewSize(const QCameraParameters& );
@@ -875,7 +873,6 @@ private:
     int32_t mHfrMode;
     bool m_bDisplayFrame;
     int32_t mExposureTime;
-    int32_t mPrvwIsoMode;
     int32_t mManualIso;
     bool m_bSceneModeAuto;
 };
