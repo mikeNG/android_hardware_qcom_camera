@@ -2022,8 +2022,6 @@ QCameraHeapMemory *QCamera2HardwareInterface::allocateStreamInfoBuf(
         if (gCamCapability[mCameraId]->min_required_pp_mask & CAM_QCOM_FEATURE_SHARPNESS) {
             streamInfo->pp_config.feature_mask |= CAM_QCOM_FEATURE_SHARPNESS;
             streamInfo->pp_config.sharpness = mParameters.getInt(QCameraParameters::KEY_QC_SHARPNESS);
-            if (streamInfo->pp_config.sharpness > MAX_REAL_SHARPNESS)
-                streamInfo->pp_config.sharpness = MAX_REAL_SHARPNESS;
         }
 
         if (gCamCapability[mCameraId]->min_required_pp_mask & CAM_QCOM_FEATURE_EFFECT) {
@@ -4713,8 +4711,6 @@ QCameraReprocessChannel *QCamera2HardwareInterface::addOnlineReprocChannel(
         if (gCamCapability[mCameraId]->min_required_pp_mask & CAM_QCOM_FEATURE_SHARPNESS) {
             pp_config.feature_mask |= CAM_QCOM_FEATURE_SHARPNESS;
             pp_config.sharpness = mParameters.getInt(QCameraParameters::KEY_QC_SHARPNESS);
-            if (pp_config.sharpness > MAX_REAL_SHARPNESS)
-                pp_config.sharpness = MAX_REAL_SHARPNESS;
         }
 
         if (gCamCapability[mCameraId]->min_required_pp_mask & CAM_QCOM_FEATURE_CROP) {
