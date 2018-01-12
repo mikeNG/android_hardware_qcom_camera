@@ -694,7 +694,6 @@ QCameraParameters::QCameraParameters()
       m_bFixedFrameRateSet(false),
       m_bHDREnabled(false),
       m_bAVTimerEnabled(false),
-      m_bDISEnabled(false),
       m_bMobiEnabled(false),
       m_bDISEnabled(false),
       m_AdjustFPS(NULL),

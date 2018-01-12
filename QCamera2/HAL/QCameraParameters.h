@@ -569,7 +569,6 @@ public:
     int32_t enableFlash(bool enableFlash, bool commitSettings);
     int32_t updateRAW(cam_dimension_t max_dim);
     bool isAVTimerEnabled();
-    bool isDISEnabled();
     bool isMobicatEnabled();
     bool isDISEnabled();
 
@@ -843,7 +842,6 @@ private:
     cam_dimension_t m_rawSize; // live snapshot size
     bool m_bHDREnabled;             // if HDR is enabled
     bool m_bAVTimerEnabled;    //if AVTimer is enabled
-    bool m_bDISEnabled;
     bool m_bMobiEnabled;
     bool m_bDISEnabled;
     QCameraAdjustFPS *m_AdjustFPS;
